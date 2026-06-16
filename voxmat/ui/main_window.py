@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSettings
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (QDockWidget, QFileDialog, QMainWindow,
                                QMessageBox)
@@ -13,6 +13,7 @@ from ..core.document import Document
 from ..core.selection import (mask_at, mask_box, mask_by_color, mask_flood)
 from ..io.binary_export import read_mmvox, write_mmvox
 from ..io.image_import import import_frames
+from ..io.paths import samples_dir
 from .commands import AssignMaterialCommand, UndoStack
 from .panels.frame_list import FrameListPanel
 from .panels.import_dialog import ImportDialog
@@ -141,22 +142,31 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             f"Imported {len(frames)} frame(s), {self.document.dims} voxels", 5000)
 
+    def _project_dir(self) -> str:
+        """Initial directory for the .mmvox dialogs: the last used one, or the
+        bundled samples folder on first run."""
+        return QSettings("Voxmat", "paths").value("project_dir", str(samples_dir()))
+
+    def _remember_project_dir(self, path: str) -> None:
+        QSettings("Voxmat", "paths").setValue("project_dir", str(Path(path).parent))
+
     def _export(self):
         if not self.document.frames:
             QMessageBox.information(self, "Nothing to export", "Import a model first.")
             return
         path, _ = QFileDialog.getSaveFileName(
-            self, "Export .mmvox", "", "Voxmat voxel (*.mmvox)")
+            self, "Export .mmvox", self._project_dir(), "Voxmat voxel (*.mmvox)")
         if not path:
             return
         if not path.lower().endswith(".mmvox"):
             path += ".mmvox"
         write_mmvox(path, self.document)
+        self._remember_project_dir(path)
         self.statusBar().showMessage(f"Exported {Path(path).name}", 5000)
 
     def _open_project(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Open .mmvox", "", "Voxmat voxel (*.mmvox)")
+            self, "Open .mmvox", self._project_dir(), "Voxmat voxel (*.mmvox)")
         if not path:
             return
         try:
@@ -164,6 +174,7 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Open failed", str(exc))
             return
+        self._remember_project_dir(path)
         self._swap_document(doc)
 
     def _swap_document(self, doc: Document):

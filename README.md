@@ -10,6 +10,11 @@ control that MagicaVoxel does not provide on its own: distinct emission, metalne
 roughness, transmission, and index of refraction across a single model. A torch's
 wooden stick and its flame, for example, can carry completely different materials.
 
+![Voxmat rendering the bundled Cornell-box sample: glass, a mirror, and a blue emissive light under global illumination](docs/hero.png)
+
+*The bundled sample `samples/cornell_box.mmvox` rendered in Voxmat. It is also the
+default location of the Open and Export dialogs.*
+
 ## Install & run
 
 Requires Python 3.11+ and an OpenGL 3.3 capable GPU.
@@ -59,6 +64,8 @@ from an HDRI image, a procedural sky, or a flat ambient colour. Background, tone
 map, exposure, GI and environment intensity, and glass density are all adjustable,
 and the preview can be detached into its own window (Window → Open render window).
 The preview is view-only; editing and selection stay in the main viewport.
+
+![The Voxmat editor with the Cornell box sample open and a detached live render window](docs/front.png)
 
 ## Sliced image format (input)
 
