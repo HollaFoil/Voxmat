@@ -1,0 +1,26 @@
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Packaging / build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments (anchored so it never matches assets/env/)
+/.venv/
+/venv/
+/env/
+
+# Editor / OS cruft
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Render outputs dumped at the repo root (e.g. preview/screenshot PNGs).
+# Anchored to root so bundled assets (assets/**) are still tracked.
+/*.png

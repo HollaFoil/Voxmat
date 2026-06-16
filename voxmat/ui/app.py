@@ -1,0 +1,32 @@
+"""Application entry point: configures the GL surface and shows the main window."""
+
+from __future__ import annotations
+
+import sys
+
+from PySide6.QtGui import QSurfaceFormat
+from PySide6.QtWidgets import QApplication
+
+from .main_window import MainWindow
+
+
+def _configure_gl() -> None:
+    fmt = QSurfaceFormat()
+    fmt.setVersion(3, 3)
+    fmt.setProfile(QSurfaceFormat.CoreProfile)
+    fmt.setDepthBufferSize(24)
+    fmt.setStencilBufferSize(8)
+    fmt.setSwapBehavior(QSurfaceFormat.DoubleBuffer)
+    QSurfaceFormat.setDefaultFormat(fmt)
+
+
+def main() -> int:
+    _configure_gl()
+    app = QApplication(sys.argv)
+    win = MainWindow()
+    win.show()
+    return app.exec()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
