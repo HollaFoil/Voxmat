@@ -1,6 +1,6 @@
 # Voxmat
 
-Voxmat is a per-voxel material editor for sliced voxel images. It imports a
+Voxmat is a per-voxel material editor for grid-based voxel models. It imports a
 sliced PNG (a strip or grid of square layers), assigns real PBR + global-
 illumination materials to individual voxels — selected by colour, region, or
 contiguous fill — and exports a compact binary that an external importer can read.
