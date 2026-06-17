@@ -12,11 +12,12 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFormLayout,
                                QGroupBox, QHBoxLayout, QLabel, QPushButton,
-                               QSlider, QVBoxLayout, QWidget)
+                               QSlider, QSpinBox, QVBoxLayout, QWidget)
 
 from ...render import available_environments, load_environment
 from ..viewport.gl_widget import VoxelView
 from ..widgets.color_picker import ColorPickerDialog
+from ..widgets.info import with_info
 
 
 class RenderPanel(QWidget):
@@ -97,23 +98,33 @@ class RenderPanel(QWidget):
         for name in ("Filmic", "ACES", "Reinhard", "Linear"):
             self.tonemap.addItem(name)
         self.tonemap.currentIndexChanged.connect(self._apply_params)
-        form.addRow("Tone map  ⓘ", self.tonemap)
+        form.addRow("Tone map", with_info(self.tonemap, self.tonemap.toolTip()))
 
         self.exposure = self._slider(5, 400, 100,
             "Brightness of the final image (display only — no re-render).")
-        form.addRow("Exposure  ⓘ", self.exposure)
+        form.addRow("Exposure", with_info(self.exposure, self.exposure.toolTip()))
         self.gi_scale = self._slider(0, 400, 100,
             "Strength of the bounced/indirect light from the voxel GI cache.")
-        form.addRow("GI intensity  ⓘ", self.gi_scale)
+        form.addRow("GI intensity", with_info(self.gi_scale, self.gi_scale.toolTip()))
         self.env_intensity = self._slider(0, 400, 70,
             "How strongly the environment lights the scene and how bright the\n"
             "background looks.")
-        form.addRow("Env intensity  ⓘ", self.env_intensity)
+        form.addRow("Env intensity", with_info(self.env_intensity, self.env_intensity.toolTip()))
 
         self.glass_density = self._slider(0, 300, 60,
             "Optical density of glass/transmissive materials: higher values tint\n"
             "and darken thicker glass more strongly (Beer-Lambert absorption).")
-        form.addRow("Glass density  ⓘ", self.glass_density)
+        form.addRow("Glass density", with_info(self.glass_density, self.glass_density.toolTip()))
+
+        self.max_bounces = QSpinBox()
+        self.max_bounces.setRange(1, 32)
+        self.max_bounces.setValue(4)
+        self.max_bounces.setToolTip("Number of specular reflection bounces in the camera\n"
+                                    "pass. Raise it for mirror-in-mirror scenes; higher\n"
+                                    "values cost more per sample. (Diffuse GI bounces are\n"
+                                    "handled separately by the cache and aren't affected.)")
+        self.max_bounces.valueChanged.connect(self._apply_params)
+        form.addRow("Max bounces", with_info(self.max_bounces, self.max_bounces.toolTip()))
 
         self.denoise = QCheckBox("Denoise")
         self.denoise.setChecked(False)   # off by default — see tooltip
@@ -197,6 +208,7 @@ class RenderPanel(QWidget):
             env_flip_h=self.flip_h.isChecked(),
             env_flip_v=self.flip_v.isChecked(),
             ambient=self._ambient,
+            max_bounces=self.max_bounces.value(),
             denoise_enabled=self.denoise.isChecked(),
         )
 

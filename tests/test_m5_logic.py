@@ -40,7 +40,7 @@ def test_assign_command_undo_redo():
     mask[0, 0, 0] = True
     mask[1, 1, 1] = True
 
-    stack.push(AssignMaterialCommand(grid, mask, 7))
+    stack.push(AssignMaterialCommand(doc, grid, mask, 7))
     assert grid.material_id[0, 0, 0] == 7 and grid.material_id[1, 1, 1] == 7
 
     stack.undo()

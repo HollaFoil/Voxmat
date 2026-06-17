@@ -145,8 +145,8 @@ class PathTracer:
     # -- params / reset ---------------------------------------------------
     def set_params(self, *, exposure=None, tonemap=None, gi_scale=None,
                    env_intensity=None, ambient=None, env_flip_h=None,
-                   env_flip_v=None, glass_density=None, denoise_enabled=None,
-                   denoise_iters=None) -> None:
+                   env_flip_v=None, glass_density=None, max_bounces=None,
+                   denoise_enabled=None, denoise_iters=None) -> None:
         # display-only (no reset at all): exposure, tonemap, denoise
         if exposure is not None:
             self.exposure = exposure
@@ -159,7 +159,8 @@ class PathTracer:
         # Params read only by the camera pass: changing them invalidates the
         # accumulated image but NOT the (view-independent) irradiance cache, so
         # the converged GI survives — only the per-pixel image restarts.
-        camera_only = (("gi_scale", gi_scale), ("glass_density", glass_density))
+        camera_only = (("gi_scale", gi_scale), ("glass_density", glass_density),
+                       ("max_bounces", max_bounces))
         # Params that feed the GI gather (env lighting): the cache must reconverge.
         cache_affecting = (("env_intensity", env_intensity), ("ambient", ambient),
                            ("env_flip_h", env_flip_h), ("env_flip_v", env_flip_v))

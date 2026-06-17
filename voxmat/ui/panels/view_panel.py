@@ -11,14 +11,19 @@ from PySide6.QtWidgets import (QCheckBox, QGridLayout, QGroupBox, QLabel,
                                QPushButton, QVBoxLayout, QWidget)
 
 from ...core.document import Document
+from ..commands import OrientationCommand
 from ..viewport.gl_widget import VoxelView
 
 
 class ViewPanel(QWidget):
-    def __init__(self, document: Document, view: VoxelView, parent=None):
+    def __init__(self, document: Document, view: VoxelView,
+                 push_command=None, parent=None):
         super().__init__(parent)
         self.document = document
         self.view = view
+        # Route mutations through the undo stack; fall back to a direct apply if
+        # constructed without one (e.g. in isolation).
+        self._push = push_command or (lambda cmd: cmd.do())
         root = QVBoxLayout(self)
 
         recenter = QPushButton("Recenter view")
@@ -74,13 +79,13 @@ class ViewPanel(QWidget):
     def _flip(self, axis):
         if not self.document.frames:
             return
-        self.document.flip_axis(axis)
+        self._push(OrientationCommand(self.document, "flip", axis))
         self._recenter()
 
     def _rotate(self):
         if not self.document.frames:
             return
-        self.document.rotate90(1)
+        self._push(OrientationCommand(self.document, "rotate"))
         self._recenter()
 
     def _toggle_swap(self, checked):

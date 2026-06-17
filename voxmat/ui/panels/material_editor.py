@@ -13,14 +13,16 @@ from dataclasses import replace
 import numpy as np
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QIcon, QPixmap
-from PySide6.QtWidgets import (QDoubleSpinBox, QFormLayout,
+from PySide6.QtWidgets import (QDoubleSpinBox, QFormLayout, QGroupBox,
                                QHBoxLayout, QLabel, QLineEdit, QListWidget,
                                QListWidgetItem, QCheckBox, QPushButton,
                                QVBoxLayout, QWidget)
 
 from ...core.document import Document
 from ...core.material import Material
+from ..commands import AddMaterialCommand, MaterialEditCommand, RemoveMaterialCommand
 from ..widgets.color_picker import ColorPickerDialog
+from ..widgets.info import with_info
 
 
 # Plain-language explanations shown as hover tooltips / info chips.
@@ -55,21 +57,33 @@ class _ColorButton(QPushButton):
         self._on_change = on_change
         self._has_alpha = has_alpha
         self._color = (255, 255, 255, 255)
-        self.setFixedWidth(80)
+        self.setMinimumWidth(80)
         # Unique object name so the colour stylesheet is scoped to THIS button
         # and never cascades onto child widgets (e.g. a dialog parented here).
         _ColorButton._counter += 1
         self.setObjectName(f"colorbtn_{_ColorButton._counter}")
         self.clicked.connect(self._open)
+        self._restyle()
 
     def set_color(self, rgba):
         c = [int(round(v * 255)) for v in rgba]
         while len(c) < 4:
             c.append(255)
         self._color = tuple(c)
+        self._restyle()
+
+    def setEnabled(self, on):                 # grey the swatch when disabled
+        super().setEnabled(on)
+        self._restyle()
+
+    def _restyle(self):
+        c = self._color
+        if self.isEnabled():
+            fill, border = f"rgb({c[0]},{c[1]},{c[2]})", "#555"
+        else:
+            fill, border = "#3a3a3a", "#444"
         self.setStyleSheet(
-            f"#{self.objectName()} {{ background-color: rgb({c[0]},{c[1]},{c[2]}); "
-            f"border: 1px solid #555; }}")
+            f"#{self.objectName()} {{ background-color: {fill}; border: 1px solid {border}; }}")
 
     def _open(self):
         c = QColor(*self._color)
@@ -89,54 +103,78 @@ class MaterialEditorPanel(QWidget):
     # emitted when the user clicks "Assign to selection" (material id)
     assign_requested = Signal(int)
 
-    def __init__(self, document: Document, parent=None):
+    def __init__(self, document: Document, push_command=None, parent=None):
         super().__init__(parent)
         self.document = document
+        self._push = push_command or (lambda cmd: cmd.do())
         self._current: Material | None = None
         self._loading = False
 
         root = QVBoxLayout(self)
 
+        # ===== Materials: pick, add/remove, assign — the primary workflow =====
+        mat_box = QGroupBox("Materials")
+        mat_l = QVBoxLayout(mat_box)
+
         self.list = QListWidget()
         self.list.currentRowChanged.connect(self._on_select)
-        root.addWidget(self.list, 1)
+        mat_l.addWidget(self.list, 1)
 
-        btn_row = QHBoxLayout()
-        add_btn = QPushButton("Add")
-        add_btn.clicked.connect(self._add)
-        del_btn = QPushButton("Remove")
-        del_btn.clicked.connect(self._remove)
-        btn_row.addWidget(add_btn)
-        btn_row.addWidget(del_btn)
-        root.addLayout(btn_row)
+        tools = QHBoxLayout()
+        self.add_btn = self._icon_btn("+", "Add a new material", self._add)
+        self.del_btn = self._icon_btn("−", "Remove the selected material", self._remove)
+        tools.addWidget(self.add_btn)
+        tools.addWidget(self.del_btn)
+        tools.addStretch(1)
+        mat_l.addLayout(tools)
 
-        # -- property form --
+        assign_btn = QPushButton("Assign to selection")
+        assign_btn.setToolTip("Set the selected voxels to use the highlighted material.")
+        assign_btn.clicked.connect(self._assign)
+        mat_l.addWidget(assign_btn)
+
+        select_btn = QPushButton("Select voxels using this material")
+        select_btn.setToolTip("Select every voxel in the current frame that uses\n"
+                              "the highlighted material — handy to see where it's applied.")
+        select_btn.clicked.connect(self._select_by_material)
+        mat_l.addWidget(select_btn)
+
+        self.sel_info = QLabel("No selection")
+        self.sel_info.setWordWrap(True)
+        self.sel_info.setStyleSheet("color: #aaa;")
+        mat_l.addWidget(self.sel_info)
+        root.addWidget(mat_box)
+
+        # ===== Properties of the highlighted material — secondary =====
+        prop_box = QGroupBox("Properties")
+        prop_l = QVBoxLayout(prop_box)
         form = QFormLayout()
         self.name_edit = QLineEdit()
         self.name_edit.editingFinished.connect(self._commit)
         form.addRow("Name", self.name_edit)
 
-        self.use_voxel_color = QCheckBox("Use voxel colour as albedo")
+        self.use_voxel_color = QCheckBox()
         self.use_voxel_color.toggled.connect(self._commit)
-        self._add_row(form, "", self.use_voxel_color, _TIPS["use_voxel_color"])
+        self.use_voxel_color.toggled.connect(self._sync_color_enabled)
+        self._add_row(form, "Use voxel colour", self.use_voxel_color, _TIPS["use_voxel_color"])
 
         self.albedo_btn = _ColorButton(self._commit, has_alpha=True)
-        self._add_row(form, "Albedo tint", self.albedo_btn, _TIPS["albedo"])
+        self._albedo_label = self._add_row(form, "Albedo tint", self.albedo_btn, _TIPS["albedo"])
 
         self.metallic = self._float(0, 1, 0.05)
         self._add_row(form, "Metallic", self.metallic, _TIPS["metallic"])
         self.roughness = self._float(0, 1, 0.05)
         self._add_row(form, "Roughness", self.roughness, _TIPS["roughness"])
 
-        self.emission_use_voxel = QCheckBox("Emit the voxel's own colour")
-        self.emission_use_voxel.setToolTip(
-            "Use each voxel's imported colour as the glow colour, instead of the\n"
-            "fixed Emission colour below. Great for multi-coloured emissive parts.")
+        self.emission_use_voxel = QCheckBox()
         self.emission_use_voxel.toggled.connect(self._commit)
-        self._add_row(form, "", self.emission_use_voxel, _TIPS["emission"])
+        self.emission_use_voxel.toggled.connect(self._sync_color_enabled)
+        self._add_row(form, "Emit voxel colour", self.emission_use_voxel,
+                      "Use each voxel's imported colour as the glow colour, instead of\n"
+                      "the fixed Emission colour below. Great for multi-coloured parts.")
 
         self.emission_btn = _ColorButton(self._commit)
-        self._add_row(form, "Emission colour", self.emission_btn, _TIPS["emission"])
+        self._emission_label = self._add_row(form, "Emission colour", self.emission_btn, _TIPS["emission"])
         self.emission_strength = self._float(0, 100, 0.1)
         self._add_row(form, "Emission strength", self.emission_strength,
                       _TIPS["emission_strength"])
@@ -146,22 +184,14 @@ class MaterialEditorPanel(QWidget):
         self.ior = self._float(1.0, 3.0, 0.01)
         self._add_row(form, "IOR", self.ior, _TIPS["ior"])
 
-        root.addLayout(form)
+        prop_l.addLayout(form)
 
-        assign_btn = QPushButton("Assign to selection")
-        assign_btn.clicked.connect(self._assign)
-        root.addWidget(assign_btn)
-
-        select_btn = QPushButton("Select voxels using this material")
-        select_btn.setToolTip("Select every voxel in the current frame that uses\n"
-                              "the highlighted material — handy to see where it's applied.")
-        select_btn.clicked.connect(self._select_by_material)
-        root.addWidget(select_btn)
-
-        self.sel_info = QLabel("No selection")
-        self.sel_info.setWordWrap(True)
-        self.sel_info.setStyleSheet("color: #aaa;")
-        root.addWidget(self.sel_info)
+        self.reset_btn = QPushButton("Reset properties to default")
+        self.reset_btn.setToolTip("Reset every property of the highlighted material to\n"
+                                  "its default value (keeps its name).")
+        self.reset_btn.clicked.connect(self._reset_to_default)
+        prop_l.addWidget(self.reset_btn)
+        root.addWidget(prop_box)
 
         document.materials_changed.connect(self._reload)
         document.selection_changed.connect(self._update_selection_info)
@@ -177,13 +207,31 @@ class MaterialEditorPanel(QWidget):
         s.valueChanged.connect(self._commit)
         return s
 
+    def _icon_btn(self, text, tip, slot):
+        b = QPushButton(text)
+        b.setFixedWidth(30)
+        b.setToolTip(tip)
+        b.clicked.connect(slot)
+        return b
+
     @staticmethod
     def _add_row(form, label_text, widget, tip):
-        """Add a form row with a hover tooltip and a small 'ⓘ' info chip."""
+        """Add a form row whose field carries a right-aligned, click-to-show 'ⓘ'.
+        Returns the row's label so callers can grey it out with its field."""
         widget.setToolTip(tip)
-        label = QLabel((label_text + "  ⓘ") if label_text else "ⓘ")
-        label.setToolTip(tip)
-        form.addRow(label, widget)
+        label = QLabel(label_text)
+        form.addRow(label, with_info(widget, tip))
+        return label
+
+    def _sync_color_enabled(self):
+        """A 'use voxel colour' checkbox makes its colour picker irrelevant, so
+        disable (and grey) the picker and its label while it's ticked."""
+        use_vox = self.use_voxel_color.isChecked()
+        self.albedo_btn.setEnabled(not use_vox)
+        self._albedo_label.setEnabled(not use_vox)
+        emit_vox = self.emission_use_voxel.isChecked()
+        self.emission_btn.setEnabled(not emit_vox)
+        self._emission_label.setEnabled(not emit_vox)
 
     # -- library list -----------------------------------------------------
     @staticmethod
@@ -222,9 +270,13 @@ class MaterialEditorPanel(QWidget):
     def _on_select(self, row: int):
         if row < 0:
             self._current = None
+            self.del_btn.setEnabled(False)
+            self.reset_btn.setEnabled(False)
             return
         mat_id = self.list.item(row).data(Qt.UserRole)
         self._current = self.document.materials.get(mat_id)
+        self.del_btn.setEnabled(mat_id != 0)      # the default material is permanent
+        self.reset_btn.setEnabled(True)
         self._load_fields(self._current)
 
     def _load_fields(self, m: Material):
@@ -236,20 +288,21 @@ class MaterialEditorPanel(QWidget):
         self.roughness.setValue(m.roughness)
         self.emission_use_voxel.setChecked(m.emission_use_voxel_color)
         self.emission_btn.set_color(m.emission_color)
-        self.emission_btn.setEnabled(not m.emission_use_voxel_color)
         self.emission_strength.setValue(m.emission_strength)
         self.transmission.setValue(m.transmission)
         self.ior.setValue(m.ior)
+        self._sync_color_enabled()
         self._loading = False
 
     # -- editing ----------------------------------------------------------
     def _commit(self, *args):
         if self._loading or self._current is None:
             return
+        before = self._current
         emission = self.emission_btn.rgba()[:3]
         updated = replace(
-            self._current,
-            name=self.name_edit.text() or self._current.name,
+            before,
+            name=self.name_edit.text() or before.name,
             use_voxel_color=self.use_voxel_color.isChecked(),
             albedo=self.albedo_btn.rgba(),
             metallic=self.metallic.value(),
@@ -260,14 +313,14 @@ class MaterialEditorPanel(QWidget):
             transmission=self.transmission.value(),
             ior=self.ior.value(),
         )
-        self.emission_btn.setEnabled(not updated.emission_use_voxel_color)
+        self._sync_color_enabled()
         self._current = updated
-        self.document.materials.update(updated)
-        self.document.materials_changed.emit()
+        # Undoable; rapid edits to the same material coalesce into one step.
+        self._push(MaterialEditCommand(self.document, before, updated))
 
     def _add(self):
-        mat = self.document.materials.new()
-        self.document.materials_changed.emit()
+        mat = self.document.materials.new()          # allocates a stable id
+        self._push(AddMaterialCommand(self.document, mat))
         # select the new one
         for i in range(self.list.count()):
             if self.list.item(i).data(Qt.UserRole) == mat.id:
@@ -277,8 +330,16 @@ class MaterialEditorPanel(QWidget):
     def _remove(self):
         if self._current is None or self._current.id == 0:
             return
-        self.document.materials.remove(self._current.id)
-        self.document.materials_changed.emit()
+        self._push(RemoveMaterialCommand(self.document, self._current))
+
+    def _reset_to_default(self):
+        if self._current is None:
+            return
+        before = self._current
+        # Fresh Material defaults, keeping the id and name.
+        default = Material(id=before.id, name=before.name)
+        self._current = default
+        self._push(MaterialEditCommand(self.document, before, default))
 
     def _assign(self):
         if self._current is None:

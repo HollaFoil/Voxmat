@@ -6,12 +6,14 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QAbstractItemView, QListWidget, QListWidgetItem
 
 from ...core.document import Document
+from ..commands import ReorderFramesCommand
 
 
 class FrameListPanel(QListWidget):
-    def __init__(self, document: Document, parent=None):
+    def __init__(self, document: Document, push_command=None, parent=None):
         super().__init__(parent)
         self.document = document
+        self._push = push_command or (lambda cmd: cmd.do())
         self.setDragDropMode(QAbstractItemView.InternalMove)
         self.setSelectionMode(QAbstractItemView.SingleSelection)
         self._syncing = False
@@ -54,6 +56,6 @@ class FrameListPanel(QListWidget):
         if sorted(new_order) != list(range(len(self.document.frames))):
             return
         self._syncing = True
-        self.document.reorder_frames(new_order)
+        self._push(ReorderFramesCommand(self.document, new_order))
         self._syncing = False
         self._reload()

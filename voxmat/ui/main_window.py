@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (QDockWidget, QFileDialog, QMainWindow,
                                QMessageBox)
 
 from ..core.document import Document
+from ..core.material import MaterialLibrary
 from ..core.selection import (mask_at, mask_box, mask_by_color, mask_flood)
 from ..io.binary_export import read_mmvox, write_mmvox
 from ..io.image_import import import_frames
@@ -48,10 +49,10 @@ class MainWindow(QMainWindow):
 
     # -- layout -----------------------------------------------------------
     def _build_docks(self):
-        self.frame_panel = FrameListPanel(self.document)
-        self.view_panel = ViewPanel(self.document, self.view)
+        self.frame_panel = FrameListPanel(self.document, self._push_command)
+        self.view_panel = ViewPanel(self.document, self.view, self._push_command)
         self.tools_panel = SelectionToolsPanel(self.document)
-        self.material_panel = MaterialEditorPanel(self.document)
+        self.material_panel = MaterialEditorPanel(self.document, self._push_command)
         self.material_panel.assign_requested.connect(self._assign_material)
         self.render_panel = RenderPanel(self.view)
 
@@ -84,8 +85,11 @@ class MainWindow(QMainWindow):
         self._action(m, "Quit", self.close, "Ctrl+Q")
 
         e = self.menuBar().addMenu("&Edit")
-        self._action(e, "Undo", self.undo_stack.undo, "Ctrl+Z")
-        self._action(e, "Redo", self.undo_stack.redo, "Ctrl+Y")
+        # Bind to wrappers (not undo_stack.undo) so a document swap, which builds a
+        # fresh stack, doesn't leave the menu pointing at the old one.
+        self.undo_action = self._action(e, "Undo", self._undo, "Ctrl+Z")
+        self.redo_action = self._action(e, "Redo", self._redo, "Ctrl+Y")
+        self._update_undo_actions()
 
         self.window_menu = self.menuBar().addMenu("&Window")
         self._populate_window_menu()
@@ -137,6 +141,12 @@ class MainWindow(QMainWindow):
         except Exception as exc:  # surface import errors to the user
             QMessageBox.critical(self, "Import failed", str(exc))
             return
+        # A new model gets a clean material library (just Default) and a fresh undo
+        # history — the previous model's materials/edits don't carry over.
+        self.document.materials = MaterialLibrary()
+        self.document.materials_changed.emit()
+        self.undo_stack = UndoStack(self.document)
+        self._update_undo_actions()
         self.view.camera.frame_dims(self.document.dims)
         self.view.rebuild()
         self.statusBar().showMessage(
@@ -188,8 +198,28 @@ class MainWindow(QMainWindow):
         self._build_docks()
         self.view.camera.frame_dims(doc.dims)
         self.view.rebuild()
+        self._update_undo_actions()           # the new document starts with an empty stack
         if self._render_window is not None:
             self._render_window.set_document(doc)
+
+    # -- undo/redo plumbing ----------------------------------------------
+    def _push_command(self, command):
+        """Single sink every editing action goes through, so undo/redo and the
+        menu state stay consistent. Always uses the current document's stack."""
+        self.undo_stack.push(command)
+        self._update_undo_actions()
+
+    def _undo(self):
+        self.undo_stack.undo()
+        self._update_undo_actions()
+
+    def _redo(self):
+        self.undo_stack.redo()
+        self._update_undo_actions()
+
+    def _update_undo_actions(self):
+        self.undo_action.setEnabled(self.undo_stack.can_undo)
+        self.redo_action.setEnabled(self.undo_stack.can_redo)
 
     # -- material assignment (undoable) -----------------------------------
     def _assign_material(self, material_id: int):
@@ -198,8 +228,9 @@ class MainWindow(QMainWindow):
             return
         if material_id not in self.document.materials:
             return
-        cmd = AssignMaterialCommand(frame.grid, self.document.selection.mask, material_id)
-        self.undo_stack.push(cmd)
+        cmd = AssignMaterialCommand(self.document, frame.grid,
+                                    self.document.selection.mask, material_id)
+        self._push_command(cmd)
         self.statusBar().showMessage(
             f"Assigned material {material_id} to {len(cmd.coords)} voxels", 4000)
 

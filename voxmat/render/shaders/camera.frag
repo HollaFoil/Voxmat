@@ -93,6 +93,40 @@ vec3 shade(vec3 hitPoint, vec3 rayDir, ivec3 cell, vec3 normal, Mat material, in
     for (int bounce = 0; bounce < u_max_bounces; bounce++) {
         radiance += throughput * material.emission;
 
+        // -- dielectric (glass): Fresnel reflect-or-refract through the block ----
+        // Done at the top of the loop, so a ray that passes through one glass
+        // surface and meets ANOTHER (e.g. the far wall of a glass shell, or glass
+        // resting on glass) keeps transmitting instead of being shaded as if that
+        // second surface were opaque (which returned the glass's flat albedo and
+        // dead-ended bouncy paths to black).
+        if (material.transmission > 0.0) {
+            vec3 origin, dir;
+            if (random01(rng) < fresnel_dielectric(abs(dot(rayDir, normal)), material.ior)) {
+                dir = reflect(rayDir, normal);              // mirror off the surface
+                origin = hitPoint + normal * EPS;
+            } else {                                        // transmit through the block
+                origin = hitPoint; dir = rayDir;
+                ivec3 landCell; vec3 landNormal; bool landed;
+                if (!transmit_block(origin, dir, cell, normal, material, throughput,
+                                    landCell, landNormal, landed)) {
+                    radiance += throughput * sample_env(dir); break;
+                }
+                if (landed) {                               // exited onto an adjacent solid
+                    hitPoint = origin; cell = landCell; normal = landNormal;
+                    material = fetch_material(landCell); rayDir = dir;
+                    continue;                               // shade/transmit it next iteration
+                }
+            }
+            ivec3 hc; vec3 hn; float ht;
+            if (!trace_voxel(origin + dir * EPS, dir, cell, false, hc, hn, ht)) {
+                radiance += throughput * sample_env(dir); break;
+            }
+            hitPoint = origin + dir * EPS + dir * ht;
+            cell = hc; normal = hn; material = fetch_material(hc); rayDir = dir;
+            continue;
+        }
+
+        // -- opaque metallic-roughness surface ----------------------------------
         vec3 view = -rayDir;
         float ndv = max(dot(normal, view), 1e-4);
         vec3 fresnelF0 = mix(vec3(0.04), material.albedo, material.metallic);
@@ -121,62 +155,12 @@ vec3 shade(vec3 hitPoint, vec3 rayDir, ivec3 cell, vec3 normal, Mat material, in
             radiance += throughput * sample_env(lightDir);  // reflection escapes to the sky
             break;
         }
-        vec3 nextPoint = hitPoint + normal * EPS + lightDir * nextDistance;
-        Mat nextMat = fetch_material(nextCell);
-
-        if (nextMat.transmission > 0.0) {                   // reflection lands on glass
-            vec3 throughOrigin = nextPoint, throughDir = lightDir;
-            ivec3 landCell; vec3 landNormal; bool landed;
-            if (!transmit_block(throughOrigin, throughDir, nextCell, nextNormal, nextMat, throughput,
-                                landCell, landNormal, landed)) {
-                radiance += throughput * sample_env(throughDir); break;
-            }
-            if (landed) {                                   // glass sits on another solid
-                hitPoint = throughOrigin; cell = landCell; normal = landNormal;
-                material = fetch_material(landCell); rayDir = throughDir;
-                continue;
-            }
-            ivec3 fc; vec3 fn; float ft;
-            if (!trace_voxel(throughOrigin + throughDir * EPS, throughDir, nextCell, false, fc, fn, ft)) {
-                radiance += throughput * sample_env(throughDir); break;
-            }
-            hitPoint = throughOrigin + throughDir * EPS + throughDir * ft;
-            cell = fc; normal = fn; material = fetch_material(fc); rayDir = throughDir;
-            continue;                                       // emission added at the loop top
-        }
-
-        hitPoint = nextPoint; cell = nextCell; normal = nextNormal;
-        material = nextMat; rayDir = lightDir;
+        // Advance to the hit; if it is glass, the loop top transmits through it.
+        hitPoint = hitPoint + normal * EPS + lightDir * nextDistance;
+        cell = nextCell; normal = nextNormal;
+        material = fetch_material(nextCell); rayDir = lightDir;
     }
     return radiance;
-}
-
-vec3 dielectric_path(vec3 entryPoint, vec3 rayDir, ivec3 entryCell, vec3 entryNormal,
-                     Mat material, inout uint rng) {
-    vec3 throughput = vec3(1.0);
-    // Entry interface: Fresnel reflect-vs-refract.
-    float cosIncident = abs(dot(rayDir, entryNormal));
-    float fresnelReflectance = fresnel_dielectric(cosIncident, material.ior);
-    vec3 origin, dir;
-    if (random01(rng) < fresnelReflectance) {              // mirror off the surface
-        dir = reflect(rayDir, entryNormal);
-        origin = entryPoint + entryNormal * EPS;
-    } else {                                               // transmit through the block
-        origin = entryPoint;
-        dir = rayDir;
-        ivec3 landCell; vec3 landNormal; bool landed;
-        if (!transmit_block(origin, dir, entryCell, entryNormal, material, throughput,
-                            landCell, landNormal, landed))
-            return throughput * sample_env(dir);
-        if (landed)                                        // exited onto an adjacent solid
-            return throughput * shade(origin, dir, landCell, landNormal,
-                                      fetch_material(landCell), rng);
-    }
-    ivec3 hitCell; vec3 hitNormal; float hitDistance;
-    if (!trace_voxel(origin + dir * EPS, dir, entryCell, false, hitCell, hitNormal, hitDistance))
-        return throughput * sample_env(dir);
-    vec3 hitPoint = origin + dir * EPS + dir * hitDistance;
-    return throughput * shade(hitPoint, dir, hitCell, hitNormal, fetch_material(hitCell), rng);
 }
 
 // Deterministic denoiser guide for a glass pixel: follow the refracted ray to
@@ -223,13 +207,14 @@ void main() {
     } else {
         Mat material = fetch_material(cell);
         vec3 hitPoint = rayOrigin + rayDir * hitDistance;
+        // shade() handles glass and opaque uniformly; the G-buffer guide for a
+        // glass pixel still reports the surface seen through it (for the denoiser).
         if (material.transmission > 0.0) {
-            color = material.emission + dielectric_path(hitPoint, rayDir, cell, normal, material, rng);
             dielectric_guide(hitPoint, rayDir, cell, normal, material, gAlbedo, gNormal);
         } else {
             gAlbedo = material.albedo; gNormal = normal;
-            color = shade(hitPoint, rayDir, cell, normal, material, rng);
         }
+        color = shade(hitPoint, rayDir, cell, normal, material, rng);
     }
 
     // texelFetch (not texture(v_uv)): the accum buffer is NEAREST and same-sized,
