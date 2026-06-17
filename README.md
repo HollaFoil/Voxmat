@@ -18,27 +18,27 @@ default location of the Open and Export dialogs.*
 
 ## Install & run
 
-Requires Python 3.11+ and an OpenGL 3.3 capable GPU.
+Download a build from the [Releases](../../releases) page, unzip it, and run
+`Voxmat` (`Voxmat.exe` on Windows) — no Python needed.
 
-Create and activate a virtual environment, install the dependencies, then run (**recommended**):
+To run from source (Python 3.11+, an OpenGL 3.3 GPU):
 
 ```bash
 python -m venv .venv
-
-# Activate it:
 source .venv/bin/activate      # Linux / macOS
 .venv\Scripts\activate         # Windows (PowerShell / cmd)
-
 pip install -r requirements.txt
 python run.py
 ```
 
-Or simply install dependencies globally (**not recommended**):
+## Building
 
 ```bash
-pip install -r requirements.txt
-python run.py
+pip install pyinstaller
+pyinstaller voxmat.spec
 ```
+
+Produces a standalone app in `dist/Voxmat/`.
 
 ## Usage
 
