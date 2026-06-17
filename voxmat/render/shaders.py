@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import re
 from functools import lru_cache
-from pathlib import Path
 
-_SHADER_DIR = Path(__file__).resolve().parent / "shaders"
+from .._resources import resource_root
+
+_SHADER_DIR = resource_root() / "voxmat" / "render" / "shaders"
 _INCLUDE_RE = re.compile(r'^\s*#include\s+"([^"]+)"\s*$', re.MULTILINE)
 
 

@@ -10,9 +10,12 @@ from pathlib import Path
 
 import numpy as np
 
-_ASSET_DIR = Path(__file__).resolve().parents[2] / "assets" / "env"
-# MagicaVoxel install root is two levels above the Voxmat package dir.
-_IBL_DIR = Path(__file__).resolve().parents[3] / "ibl"
+from .._resources import resource_root
+
+_ASSET_DIR = resource_root() / "assets" / "env"
+# A host MagicaVoxel install (when running from inside one) keeps HDRIs in ../ibl;
+# absent in a standalone build, where available_environments() simply skips it.
+_IBL_DIR = resource_root().parent / "ibl"
 
 _EXTS = (".hdr", ".exr", ".png", ".jpg", ".jpeg", ".bmp")
 

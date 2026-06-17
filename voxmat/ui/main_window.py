@@ -14,7 +14,7 @@ from ..core.material import MaterialLibrary
 from ..core.selection import (mask_at, mask_box, mask_by_color, mask_flood)
 from ..io.binary_export import read_mmvox, write_mmvox
 from ..io.image_import import import_frames
-from ..io.paths import samples_dir
+from ..io.paths import default_project_dir
 from .commands import AssignMaterialCommand, UndoStack
 from .panels.frame_list import FrameListPanel
 from .panels.import_dialog import ImportDialog
@@ -155,7 +155,7 @@ class MainWindow(QMainWindow):
     def _project_dir(self) -> str:
         """Initial directory for the .mmvox dialogs: the last used one, or the
         bundled samples folder on first run."""
-        return QSettings("Voxmat", "paths").value("project_dir", str(samples_dir()))
+        return QSettings("Voxmat", "paths").value("project_dir", str(default_project_dir()))
 
     def _remember_project_dir(self, path: str) -> None:
         QSettings("Voxmat", "paths").setValue("project_dir", str(Path(path).parent))
