@@ -4,7 +4,7 @@
 
 # Voxmat
 
-**Per-voxel PBR &amp; global-illumination material editor for sliced voxel models**
+**Per-voxel PBR &amp; global-illumination material editor for voxel models**
 
 [![Latest release](https://img.shields.io/github/v/release/HollaFoil/Voxmat?sort=semver)](https://github.com/HollaFoil/Voxmat/releases/latest)
 [![Build](https://github.com/HollaFoil/Voxmat/actions/workflows/release.yml/badge.svg)](https://github.com/HollaFoil/Voxmat/actions/workflows/release.yml)
@@ -14,9 +14,9 @@
 </div>
 
 Voxmat is a per-voxel material editor for grid-based voxel models. It imports a
-sliced PNG (a strip or grid of square layers), assigns real PBR + global-illumination 
-materials to individual voxels and exports a compact binary that an external importer can read.
-It does not provide for functionality typical meshed model formats, as the tool was made only for internal project use. PRs for converters into common formats are welcome.
+sliced image (a strip or grid of square layers), assigns real PBR + global-illumination 
+materials to individual voxels, and provides export functionality for our `.mmvox` format.
+> It does not provide for functionality typical meshed model formats, as the tool was made only for internal project use. PRs for converters into common formats are welcome.
 
 Voxmat can handle sliced-image exports from MagicaVoxel, adding per-voxel material
 control that MagicaVoxel does not provide on its own: distinct emission, metalness,
@@ -68,8 +68,7 @@ Produces a standalone app in `dist/Voxmat/`.
 6. **Save & export** — File → Export .mmvox (`Ctrl+E`); reopen with Open .mmvox
    (`Ctrl+O`).
 
-Functionality for voxel editing, where users would be able to place/color/shade voxel models, 
-and do other common voxel modelling operations, is planned but not yet finished.
+> Functionality for voxel editing, where users would be able to place/color/shade voxel models, and do other common voxel modelling operations, is currently being developed.
 
 ## Rendering
 
@@ -77,9 +76,9 @@ The Render panel previews the model with global illumination, so materials read 
 the way they will once imported elsewhere (of course, depending on implementation details): emissive voxels light their
 surroundings, metals reflect, and glass transmits and refracts. Lighting comes
 from an HDRI image, a procedural sky, or a flat ambient colour. Background, tone
-map, exposure, GI and environment intensity, and glass density are all adjustable,
-and the preview can be detached into its own window (Window → Open render window).
-The preview is view-only; editing and selection stay in the main viewport.
+map, exposure, GI and environment intensity, and glass density are all adjustable.
+
+> The preview can be detached into its own window (Window → Open render window).
 
 ![The Voxmat editor with the Cornell box sample open and a detached live render window](docs/front.png)
 
@@ -129,7 +128,7 @@ frames[frame_count]:
     voxelCount x { u16 x, y, z; u16 material_id; u8 r, g, b, a }
 ```
 
-`material_id` 0 is the reserved default material. The `extra` float map and the
+> `material_id` 0 is the reserved default material. The `extra` float map and the
 `flags` bitfield are the forward-compatible extension points.
 
 ## Project layout
