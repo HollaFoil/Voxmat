@@ -1,6 +1,14 @@
 # PyInstaller build spec for Voxmat.  Build with:  pyinstaller voxmat.spec
 # Produces a one-folder app under dist/Voxmat/ (Voxmat[.exe] + an _internal dir).
+import os
+import sys
+
 from PyInstaller.utils.hooks import collect_submodules
+
+# Executable icon (Windows .ico / macOS .icns); ignored elsewhere.
+_icon = {"win32": "assets/icon.ico", "darwin": "assets/icon.icns"}.get(sys.platform)
+if _icon and not os.path.exists(_icon):
+    _icon = None
 
 # Files loaded at runtime by path (not imported), so PyInstaller can't find them
 # on its own — keep these in sync with voxmat/_resources.py:resource_root().
@@ -40,6 +48,7 @@ exe = EXE(
     upx=False,
     console=False,           # GUI app — no console window
     disable_windowed_traceback=False,
+    icon=_icon,
 )
 
 coll = COLLECT(
