@@ -1,9 +1,10 @@
 # Voxmat
 
-Voxmat is a per-voxel material editor for sliced voxel images. It imports a
-sliced PNG (a strip or grid of square layers), assigns real PBR + global-
-illumination materials to individual voxels — selected by colour, region, or
-contiguous fill — and exports a compact binary that an external importer can read.
+Voxmat is a per-voxel material editor for grid-based voxel models. It imports a
+sliced PNG (a strip or grid of square layers), assigns real PBR + global-illumination 
+materials to individual voxels and exports a compact binary that an external importer can read.
+It does not provide functionality typical meshed model formats, as the tool was made 
+for internal project use. PRs for converters into common formats are welcome.
 
 It can handle sliced-image exports from MagicaVoxel, adding per-voxel material
 control that MagicaVoxel does not provide on its own: distinct emission, metalness,
@@ -55,6 +56,9 @@ python run.py
 6. **Save & export** — File → Export .mmvox (`Ctrl+E`); reopen with Open .mmvox
    (`Ctrl+O`).
 
+Functionality for voxel editing, where users would be able to place/color/shade voxel models, 
+and do other common voxel modelling operations, is planned but not yet finished.
+
 ## Rendering
 
 The Render panel previews the model with global illumination, so materials read roughly
@@ -66,6 +70,9 @@ and the preview can be detached into its own window (Window → Open render wind
 The preview is view-only; editing and selection stay in the main viewport.
 
 ![The Voxmat editor with the Cornell box sample open and a detached live render window](docs/front.png)
+
+*The bundled sample `samples/cornell_box.mmvox` rendered in the Voxmat editor panels. 
+The render window is detached, both rasterized and raytraced views are synced and rendered at once*
 
 ## Sliced image format (input)
 
