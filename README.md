@@ -1,12 +1,24 @@
+<div align="center">
+
+<img src="assets/icon.png" width="120" alt="Voxmat logo">
+
 # Voxmat
+
+**Per-voxel PBR &amp; global-illumination material editor for sliced voxel models**
+
+[![Latest release](https://img.shields.io/github/v/release/HollaFoil/Voxmat?sort=semver)](https://github.com/HollaFoil/Voxmat/releases/latest)
+[![Build](https://github.com/HollaFoil/Voxmat/actions/workflows/release.yml/badge.svg)](https://github.com/HollaFoil/Voxmat/actions/workflows/release.yml)
+[![License](https://img.shields.io/github/license/HollaFoil/Voxmat)](LICENSE)
+![Python](https://img.shields.io/badge/python-3.11+-blue)
+
+</div>
 
 Voxmat is a per-voxel material editor for grid-based voxel models. It imports a
 sliced PNG (a strip or grid of square layers), assigns real PBR + global-illumination 
 materials to individual voxels and exports a compact binary that an external importer can read.
-It does not provide functionality typical meshed model formats, as the tool was made 
-for internal project use. PRs for converters into common formats are welcome.
+It does not provide for functionality typical meshed model formats, as the tool was made only for internal project use. PRs for converters into common formats are welcome.
 
-It can handle sliced-image exports from MagicaVoxel, adding per-voxel material
+Voxmat can handle sliced-image exports from MagicaVoxel, adding per-voxel material
 control that MagicaVoxel does not provide on its own: distinct emission, metalness,
 roughness, transmission, and index of refraction across a single model. A torch's
 wooden stick and its flame, for example, can carry completely different materials.
